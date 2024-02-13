@@ -75,7 +75,7 @@ String类本身被 `final` 修饰
 > 6. 内部类
 >    - 编译时会生成两个.class文件
 > 7. 条件编译
->    - 判断条件位常量时，编译时会自动去除常量为false的语句
+>    - 判断条件为常量时，编译时会自动去除常量为false的语句
 > 8. 断言
 >    - assert会被编译为普通的if-else语句，true就继续执行，false就抛出AssertError打断程序执行
 > 9. 数值字面量
@@ -422,7 +422,7 @@ public class Main {
 1. 静态代理
 2. 动态代理
    - JDK动态代理（有接口时）
-   - CGLIB 动态代理（无接口时，试用ASM框架操作字节码，生成一个被代理类的子类）
+   - CGLIB 动态代理（无接口时，使用ASM框架操作字节码，生成一个被代理类的子类）
 
 > 代理模式详细实现请看我的博客 [Java23 种设计模式](https://blog.hahhome.top/blog/Java%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F/#5-1-%E4%BB%A3%E7%90%86%E6%A8%A1%E5%BC%8F%E2%98%85)
 
@@ -981,6 +981,27 @@ private void grow(int minCapacity) {
 
    `LinkedHashMap` 和 `HashMap` 都是 Java 集合框架中的 Map 接口的实现类。它们的最大区别在于迭代元素的顺序。`HashMap` 迭代元素的顺序是不确定的，而 `LinkedHashMap` 提供了按照插入顺序或访问顺序迭代元素的功能。此外，`LinkedHashMap` 内部维护了一个双向链表，用于记录元素的插入顺序或访问顺序，而 `HashMap` 则没有这个链表。因此，`LinkedHashMap` 的插入性能可能会比 `HashMap` 略低，但它提供了更多的功能并且迭代效率相较于 `HashMap` 更加高效。
 
+实现LRU缓存：
+
+```java
+public class LRUCache<K, V> extends LinkedHashMap<K, V> {
+    private final int capacity;
+
+    public LRUCache(int capacity) {
+        super(capacity, 0.75f, true);
+        this.capacity = capacity;
+    }
+
+    /**
+     * 判断size超过容量时返回true，告知LinkedHashMap移除最老的缓存项(即链表的第一个元素)
+     */
+    @Override
+    protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
+        return size() > capacity;
+    }
+}
+```
+
 ### CopyOnWriteArrayList
 
 CopyOnWriteArrayList：当需要修改（ `add`，`set`、`remove` 等操作） CopyOnWriteArrayList 的内容时，不会直接修改原数组，而是会先**创建底层数组的副本，对副本数组进行修改，修改完之后再将修改后的数组赋值回去**，这样就可以保证写操作不会影响读操作了。
@@ -1136,6 +1157,71 @@ private final Condition available = lock.newCondition();
 5. **DelayQueue 和 Timer/TimerTask 的区别是什么？**
 
    `DelayQueue` 和 `Timer/TimerTask` 都可以用于实现定时任务调度，但是它们的实现方式不同。`DelayQueue` 是基于优先级队列和堆排序算法实现的，可以实现多个任务按照时间先后顺序执行；而 `Timer/TimerTask` 是基于单线程实现的，只能按照任务的执行顺序依次执行，如果某个任务执行时间过长，会影响其他任务的执行。另外，`DelayQueue` 还支持动态添加和移除任务，而 `Timer/TimerTask` 只能在创建时指定任务。
+
+使用案例：
+
+```java
+/**
+ * 延迟任务
+ */
+public class DelayedTask implements Delayed {
+    /**
+     * 任务到期时间
+     */
+    private long executeTime;
+    /**
+     * 任务
+     */
+    private Runnable task;
+
+    public DelayedTask(long delay, Runnable task) {
+        this.executeTime = System.currentTimeMillis() + delay;
+        this.task = task;
+    }
+
+    /**
+     * 查看当前任务还有多久到期
+     * @param unit
+     * @return
+     */
+    @Override
+    public long getDelay(TimeUnit unit) {
+        return unit.convert(executeTime - System.currentTimeMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * 延迟队列需要到期时间升序入队，所以我们需要实现compareTo进行到期时间比较
+     * @param o
+     * @return
+     */
+    @Override
+    public int compareTo(Delayed o) {
+        return Long.compare(this.executeTime, ((DelayedTask) o).executeTime);
+    }
+
+    public void execute() {
+        task.run();
+    }
+}
+
+
+// 创建延迟队列，并添加任务
+DelayQueue < DelayedTask > delayQueue = new DelayQueue < > ();
+
+//分别添加1s、2s、3s到期的任务
+delayQueue.add(new DelayedTask(2000, () -> System.out.println("Task 2")));
+delayQueue.add(new DelayedTask(1000, () -> System.out.println("Task 1")));
+delayQueue.add(new DelayedTask(3000, () -> System.out.println("Task 3")));
+
+// 取出任务并执行
+while (!delayQueue.isEmpty()) {
+  //阻塞获取最先到期的任务
+  DelayedTask task = delayQueue.take();
+  if (task != null) {
+    task.execute();
+  }
+}
+```
 
 ### TreeMap
 
@@ -1508,7 +1594,7 @@ public class NioSelectorExample {
             Selector selector = Selector.open();
             // 将 ServerSocketChannel 注册到 Selector 并监听 OP_ACCEPT 事件
             serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);//用于接收新连接
-
+	
             //不断轮询
             while (true) {
                 int readyChannels = selector.select();
@@ -1528,7 +1614,7 @@ public class NioSelectorExample {
                         ServerSocketChannel server = (ServerSocketChannel) key.channel();//ssfd
                         SocketChannel client = server.accept()//csfd
                         client.configureBlocking(false);
-
+ 
                         // 将客户端通道注册到 Selector 并监听 OP_READ 事件
                         client.register(selector, SelectionKey.OP_READ);//监听新连接的读事件
                     } else if (key.isReadable()) {
@@ -1592,37 +1678,400 @@ public class NioSelectorExample {
 
 > 如果我们需要使用 NIO 构建网络程序的话，**不建议直接使用原生 NIO**，编程复杂且功能性太弱，**推荐使用**一些成熟的基于 NIO 的网络编程框架比如 **Netty**
 
+### Java IO模型代码演示
+
+#### 1 BIO
+
+![image-20240212223135963](image/JavaSE重点记录.assets/image-20240212223135963.png)
+
+代码演示：
+
+通过打断点执行，发现，服务端的accept以及read确实会阻塞，客户端没有响应操作之前，服务端的代码并不会向下执行
+
+```java
+public class BioServer {
+
+    public static void main(String[] args) throws IOException {
+        ServerSocket serverSocket = new ServerSocket();
+        //绑定端口9090
+        serverSocket.bind(new InetSocketAddress(9090));
+        //阻塞等待客户端连接
+        Socket socket = serverSocket.accept();
+        while (true) {
+            InputStream inputStream = socket.getInputStream();
+            byte[] bytes = new byte[10];
+            //阻塞调用read读取消息
+            int len = inputStream.read(bytes);
+            System.out.println("服务端接收到的数据是：" + new String(bytes, 0, len));
+        }
+    }
+}
+```
+
+```java
+public class BioClient {
+
+    public static void main(String[] args) throws IOException, InterruptedException {
+        //连接bio server
+        Socket socket = new Socket();
+        socket.connect(new InetSocketAddress(9090));
+        OutputStream outputStream = socket.getOutputStream();
+        //发送数据
+        while (true) {
+            outputStream.write("test".getBytes());
+            outputStream.flush();
+            System.out.println("发送数据");
+            Thread.sleep(1000);
+        }
+    }
+}
+```
+
+我们可以对BioServer进行一个优化，每次有新的请求进来，我们就异步的去接收消息：
+
+```java
+public class BioServer2 {
+    
+    private static final ExecutorService THREAD_POOL = new ThreadPoolExecutor(10, 10, 3, TimeUnit.MINUTES, new ArrayBlockingQueue<>(1000));
+
+    public static void main(String[] args) throws IOException {
+        ServerSocket serverSocket = new ServerSocket();
+        //绑定端口9090
+        serverSocket.bind(new InetSocketAddress(9090));
+        while (true) {
+            try {
+                //阻塞等待客户端连接
+                Socket socket = serverSocket.accept();
+                THREAD_POOL.execute(() -> {
+                    while (true) {
+                        InputStream inputStream = socket.getInputStream();
+                        byte[] bytes = new byte[10];
+                        //阻塞调用read读取消息
+                        int len = inputStream.read(bytes);
+                        System.out.println("服务端接收到的数据是：" + new String(bytes, 0, len));
+                    }
+                });
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+}
+```
+
+但是：每次来一个请求，就创建一个连接，假设我们极端情况下，一台服务器下维持了1000条连接，但是这一千条连接都是没有数据发送的状态，那么我们的服务端就必须要有1000条线程去进行维持，并且都是处于read的阻塞状态。这不就是白白的资源浪费么？
+
+#### 2 NIO
+
+![image-20240212223245985](image/JavaSE重点记录.assets/image-20240212223245985.png)
+
+![image-20240212223318879](image/JavaSE重点记录.assets/image-20240212223318879.png)
+
+代码演示：
+
+IO多路复用的**POLL**模型：
+
+```java
+public class NioSimpleServer {
+    
+    private static final List<SocketChannel> acceptSocketList = new ArrayList<>();
+
+    public static void main(String[] args) throws IOException {
+        ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
+        serverSocketChannel.socket().bind(new InetSocketAddress(9090));
+        serverSocketChannel.configureBlocking(false);
+        new Thread(() -> {
+            while (true) {
+                for (SocketChannel socketChannel : acceptSocketList) {
+                    ByteBuffer byteBuffer = ByteBuffer.allocate(10);
+                    int len = 0;
+                    try {
+                        //在nio中，read也是非阻塞的，一直轮询看是否有数据
+                        len = socketChannel.read(byteBuffer);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                    System.out.println("服务端接收到的数据：" + new String(byteBuffer.array(), 0, len));
+                }
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }).start();
+        
+        while (true) {
+            //nio的accept是非阻塞调用，一直轮询看是否有连接
+            SocketChannel socketChannel = serverSocketChannel.accept();
+            if(socketChannel != null) {
+                System.out.println("连接建立");
+                socketChannel.configureBlocking(false);
+                acceptSocketList.add(socketChannel);
+            }
+        }
+    }
+}
+```
+
+上面代码只是IO多路复用中的SELECT/POLL模型，需要遍历所有socket来读取准备好的数据，并且不知道哪个socket的数据准备好了
+
+**如果我们的acceptSocket的数量很多，那么无效的遍历操作将会很多，将会很耗费CPU资源**
+
+
+
+IO多路复用的**EPOLL**模型：
+
+<img src="image/JavaSE重点记录.assets/image-20240212233434917.png" alt="image-20240212233434917" style="zoom:50%;" />
+
+![image-20240212234008379](image/JavaSE重点记录.assets/image-20240212234008379.png)
+
+> 使用epoll_create创建一个事件循环和要监听的红黑树，然后使用epoll_ctl往监听的红黑树上添加clientSocket，当数据准备完成时，我们将准备好的socket添加到reply_list中，使用epoll_wait通知数据准备完成，不会和SELECT/POLL模型一样无限制轮询
+
+```java
+public class NIOSelectorServer {
+
+    /*标识数字*/
+    private int flag = 0;
+    /*缓冲区大小*/
+    private int BLOCK = 4096;
+    /*接受数据缓冲区*/
+    private ByteBuffer sendbuffer = ByteBuffer.allocate(BLOCK);
+    /*发送数据缓冲区*/
+    private ByteBuffer receivebuffer = ByteBuffer.allocate(BLOCK);
+    private Selector selector;
+
+    public NIOSelectorServer(int port) throws IOException {
+        // 打开服务器套接字通道 
+        ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
+        // 服务器配置为非阻塞 
+        serverSocketChannel.configureBlocking(false);
+        // 检索与此通道关联的服务器套接字 
+        ServerSocket serverSocket = serverSocketChannel.socket();
+        // 进行服务的绑定 
+        serverSocket.bind(new InetSocketAddress(port));
+        // 通过open()方法找到Selector 
+        selector = Selector.open();
+        System.out.println(selector);
+        // 注册到selector，等待连接 
+        serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
+        System.out.println("Server Start----8888:");
+    }
+
+
+    // 监听 
+    private void listen() throws IOException {
+        while (true) {
+            // 这里如果没有IO事件抵达 就会进入阻塞状态
+            selector.select();
+            System.out.println("select");
+            // 返回此选择器的已选择键集。 
+            Set<SelectionKey> selectionKeys = selector.selectedKeys();
+            Iterator<SelectionKey> iterator = selectionKeys.iterator();
+            while (iterator.hasNext()) {
+                SelectionKey selectionKey = iterator.next();
+                iterator.remove();
+                handleKey(selectionKey);
+            }
+        }
+    }
+
+    // 处理请求 
+    private void handleKey(SelectionKey selectionKey) throws IOException {
+        // 接受请求 
+        ServerSocketChannel server = null;
+        SocketChannel client = null;
+        String receiveText;
+        String sendText;
+        int count = 0;
+        // 测试此键的通道是否已准备好接受新的套接字连接。 
+        if (selectionKey.isAcceptable()) {
+            // 返回为之创建此键的通道。 
+            server = (ServerSocketChannel) selectionKey.channel();
+            // 接受到此通道套接字的连接。 
+            // 非阻塞模式这里不会阻塞
+            client = server.accept();
+            // 配置为非阻塞 
+            client.configureBlocking(false);
+            // 注册到selector，等待连接 
+            client.register(selector, SelectionKey.OP_READ);
+        } else if (selectionKey.isReadable()) {
+            // 返回为之创建此键的通道。 
+            client = (SocketChannel) selectionKey.channel();
+            // 将缓冲区清空以备下次读取 
+            receivebuffer.clear();
+            // 读取服务器发送来的数据到缓冲区中 
+            count = client.read(receivebuffer);
+            if (count > 0) {
+                receiveText = new String(receivebuffer.array(), 0, count);
+                System.out.println("服务器端接受客户端数据--:" + receiveText);
+                client.register(selector, SelectionKey.OP_WRITE);
+            }
+        } else if (selectionKey.isWritable()) {
+            // 返回为之创建此键的通道。 
+            client = (SocketChannel) selectionKey.channel();
+            // 将缓冲区清空以备下次写入 
+            sendbuffer.clear();
+            sendText = "message from server--" + flag++;
+            // 向缓冲区中输入数据 
+            sendbuffer.put(sendText.getBytes());
+            // 将缓冲区各标志复位,因为向里面put了数据标志被改变要想从中读取数据发向服务器,就要复位 
+            sendbuffer.flip();
+            // 输出到通道 
+            client.write(sendbuffer);
+            System.out.println("服务器端向客户端发送数据--：" + sendText);
+            client.register(selector, SelectionKey.OP_READ);
+        }
+    }
+    
+    public static void main(String[] args) throws IOException {
+        int port = 9090;
+        NIOSelectorServer server = new NIOSelectorServer(port);
+        server.listen();
+    }
+} 
+```
+
+#### 3 AIO
+
+![image-20240212223400185](image/JavaSE重点记录.assets/image-20240212223400185.png)
+
+代码演示：
+
+```java
+package io.aio;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.AsynchronousServerSocketChannel;
+import java.nio.channels.AsynchronousSocketChannel;
+import java.nio.channels.CompletionHandler;
+import java.nio.charset.Charset;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
+public class AIOServer {
+
+    public final static int PORT = 9888;
+    private AsynchronousServerSocketChannel server;
+
+    public AIOServer() throws IOException {
+        server = AsynchronousServerSocketChannel.open().bind(new InetSocketAddress(PORT));
+    }
+
+    /**
+     * 不推荐使用future的方式去进行编程，这种方式去实现AIO其实本质和BIO没有太大的区别
+     */
+    public void startWithFuture() throws InterruptedException,
+            ExecutionException, TimeoutException {
+        while (true) {// 循环接收客户端请求
+            Future<AsynchronousSocketChannel> future = server.accept();
+            AsynchronousSocketChannel socket = future.get();// get() 是为了确保 accept 到一个连接
+            handleWithFuture(socket);
+        }
+    }
+
+    public void handleWithFuture(AsynchronousSocketChannel channel) throws InterruptedException, ExecutionException, TimeoutException {
+        ByteBuffer readBuf = ByteBuffer.allocate(2);
+        readBuf.clear();
+
+        while (true) {// 一次可能读不完
+            // get 是为了确保 read 完成，超时时间可以有效避免DOS攻击，如果客户端一直不发送数据，则进行超时处理
+            Integer integer = channel.read(readBuf).get(10, TimeUnit.SECONDS);
+            System.out.println("read: " + integer);
+            if (integer == -1) {
+                break;
+            }
+            readBuf.flip();
+            System.out.println("received: " + Charset.forName("UTF-8").decode(readBuf));
+            readBuf.clear();
+        }
+    }
+
+    /**
+     * 即提交一个 I/O 操作请求，并且指定一个 CompletionHandler。
+     * 当异步 I/O 操作完成时，便发送一个通知，此时这个 CompletionHandler 对象的 completed 或者 failed 方法将会被调用。
+     */
+    public void startWithCompletionHandler() throws InterruptedException, ExecutionException, TimeoutException {
+        server.accept(null,
+                new CompletionHandler<AsynchronousSocketChannel, Object>() {
+                    public void completed(AsynchronousSocketChannel result, Object attachment) {
+                        server.accept(null, this);// 再此接收客户端连接
+                        handleWithCompletionHandler(result);
+                    }
+
+                    @Override
+                    public void failed(Throwable exc, Object attachment) {
+                        exc.printStackTrace();
+                    }
+                });
+    }
+
+    public void handleWithCompletionHandler(final AsynchronousSocketChannel channel) {
+        try {
+            final ByteBuffer buffer = ByteBuffer.allocate(4);
+            final long timeout = 10L;
+            channel.read(buffer, timeout, TimeUnit.SECONDS, null, new CompletionHandler<Integer, Object>() {
+                @Override
+                public void completed(Integer result, Object attachment) {
+                    System.out.println("read:" + result);
+                    if (result == -1) {
+                        try {
+                            channel.close();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                        return;
+                    }
+                    buffer.flip();
+                    System.out.println("received message:" + Charset.forName("UTF-8").decode(buffer));
+                    buffer.clear();
+                    channel.read(buffer, timeout, TimeUnit.SECONDS, null, this);
+                }
+
+                @Override
+                public void failed(Throwable exc, Object attachment) {
+                    exc.printStackTrace();
+                }
+            });
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void main(String args[]) throws Exception {
+        // new AIOServer().startWithFuture();
+        new AIOServer().startWithCompletionHandler();
+        Thread.sleep(100000);
+    }
+}
+```
+
+```java
+public class AIOClient {
+
+    public static void main(String... args) throws Exception {
+        AsynchronousSocketChannel client = AsynchronousSocketChannel.open();
+        client.connect(new InetSocketAddress("localhost", 9888)).get();
+        while (true) {
+            client.write(ByteBuffer.wrap("123456789".getBytes()));
+            Thread.sleep(1000);
+        }
+    }
+}
+```
+
+
+
+**为什么Netty没有使用AIO而是采用NIO的思路去进行设计？**
+
+- 不比nio快在Unix系统上
+- 不支持数据报
+- 不必要的线程模型（太多没什么用的抽象化）
+
+总而言之，可以理解为，在Unix系统上AIO性能综合表现不如NIO好，所以Netty使用了NIO作为底层的核心。
+
 ## end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
